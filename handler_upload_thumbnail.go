@@ -31,7 +31,28 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 
 	fmt.Println("uploading thumbnail for video", videoID, "by user", userID)
 
-	// TODO: implement the upload here
+	
+	const maxMemory = 10 << 20
+	r.ParseMultipartForm(maxMemory)
+
+	file, header, err := r.FormFile("thumbnail")
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "Unable to parse form file", err)
+		return
+	}
+	mediaType := header.Header.Get("Content-Type") 
+	if mediaType == " " {
+		respondWithError(w, http.StatusUnathorized, "Couldn't find JWT", err)
+		return
+	}
+	fmt.Println("Uploaded media type:", mediaType)
+	
+
+	data, err := io.ReadAll(file)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "unable to get info", err)
+		return
+	}
 
 	respondWithJSON(w, http.StatusOK, struct{}{})
 }
