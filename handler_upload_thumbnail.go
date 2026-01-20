@@ -54,5 +54,26 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	//Get video from db
+	video, err := db.cfg.GetVideo(ctx, videoID)
+	if err != nil {
+		respondWithError(w, http.StatusNotFound, "video not found", err)
+		return
+	}
+
+	//Check the ownership of the video
+	if video.UserID != userID {
+		respondWithError(w, http.StatusUnauthorized, "You arent the creater of the video", err)
+		return
+	}
+
+	//New tn struct
+	newThumbnail := thumbnail{
+		data:	data,
+		mediaType:	mediaType,
+	}
+
+	videoThumbnails[videoID] = newThumbnail
+
 	respondWithJSON(w, http.StatusOK, struct{}{})
 }
