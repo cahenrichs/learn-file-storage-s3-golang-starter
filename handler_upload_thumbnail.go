@@ -3,6 +3,9 @@ package main
 import (
 	"fmt"
 	"net/http"
+	"io"
+	"encoding/base64"
+
 
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
 	"github.com/google/uuid"
@@ -41,8 +44,8 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	mediaType := header.Header.Get("Content-Type") 
-	if mediaType == " " {
-		respondWithError(w, http.StatusUnathorized, "Couldn't find JWT", err)
+	if mediaType == "" {
+		respondWithError(w, http.StatusUnauthorized, "Couldn't find JWT", err)
 		return
 	}
 	fmt.Println("Uploaded media type:", mediaType)
@@ -54,8 +57,14 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	//converting the image data to base64 string
+	encoded := base64.StdEncoding.EncodeToString(data)
+
+	//build url with encoded image
+	encodedURL := fmt.Sprintf("data:%s;base64,%s", mediaType, encoded)
+
 	//Get video from db
-	video, err := db.cfg.GetVideo(ctx, videoID)
+	video, err := cfg.db.GetVideo(videoID)
 	if err != nil {
 		respondWithError(w, http.StatusNotFound, "video not found", err)
 		return
@@ -67,13 +76,13 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	//New tn struct
-	newThumbnail := thumbnail{
-		data:	data,
-		mediaType:	mediaType,
+	video.ThumbnailURL = &encodedURL
+
+	err = cfg.db.UpdateVideo(video)
+	if err != nil {
+		respondWithError(w, http.StatusNotFound, "Can't update the video", err)
+		return
 	}
 
-	videoThumbnails[videoID] = newThumbnail
-
-	respondWithJSON(w, http.StatusOK, struct{}{})
+	respondWithJSON(w, http.StatusOK, video)
 }
