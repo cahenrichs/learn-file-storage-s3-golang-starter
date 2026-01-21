@@ -49,6 +49,15 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	fmt.Println("Uploaded media type:", mediaType)
+
+	parts:= strings.Split(mediaType, "/")
+	if len(parts) !=  2 {
+		respondWithError(w, http.StatusBadRequest, "invalid Content-Type", err)
+		return
+	}
+	ext := parts[1]
+	filename := videoID + "." + ext
+	path := filepath.Join(cfg.assetsRoot, filename)
 	
 
 	data, err := io.ReadAll(file)
