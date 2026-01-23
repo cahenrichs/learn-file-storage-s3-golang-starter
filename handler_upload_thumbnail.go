@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"io"
-	"encoding/base64"
+	"os"
 
 
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
@@ -45,32 +45,24 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 	}
 	mediaType := header.Header.Get("Content-Type") 
 	if mediaType == "" {
-		respondWithError(w, http.StatusUnauthorized, "Couldn't find JWT", err)
+		respondWithError(w, http.StatusBadRequest, "Couldn't find JWT", err)
 		return
 	}
-	fmt.Println("Uploaded media type:", mediaType)
 
-	parts:= strings.Split(mediaType, "/")
-	if len(parts) !=  2 {
-		respondWithError(w, http.StatusBadRequest, "invalid Content-Type", err)
-		return
-	}
-	ext := parts[1]
-	filename := videoID + "." + ext
-	path := filepath.Join(cfg.assetsRoot, filename)
-	
+	assetPath := getAssetPath(videoID, mediaType)
+	assetDiskPath := cfg.getAssetDiskPath(assetPath)
 
-	data, err := io.ReadAll(file)
+	dst, err := os.Create(assetDiskPath)
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "unable to get info", err)
+		respondWithError(w, http.StatusInternalServerError, "Can't create path", err)
 		return
 	}
+	defer dst.Close()
 
-	//converting the image data to base64 string
-	encoded := base64.StdEncoding.EncodeToString(data)
-
-	//build url with encoded image
-	encodedURL := fmt.Sprintf("data:%s;base64,%s", mediaType, encoded)
+	if _,err := io.Copy(dst, file); err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Can't copy", err)
+		return
+	}
 
 	//Get video from db
 	video, err := cfg.db.GetVideo(videoID)
@@ -85,7 +77,8 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	video.ThumbnailURL = &encodedURL
+	url := cfg.getAssetURL(assetPath)
+	video.ThumbnailURL = &url
 
 	err = cfg.db.UpdateVideo(video)
 	if err != nil {
