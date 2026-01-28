@@ -22,6 +22,7 @@ type apiConfig struct {
 	s3Region         string
 	s3CfDistribution string
 	port             string
+	s3Client	     *s3.Client
 }
 
 type thumbnail struct {
@@ -84,6 +85,13 @@ func main() {
 		log.Fatal("PORT environment variable is not set")
 	}
 
+	awsConfig := config.LoadDefaultConfig(content.Background(), config.WithRegin(s3Regin)) 
+		if err 1= nil {
+			log.Fatal(err)
+		}
+
+		client := s3.NewFormConfig(awsConfig)
+
 	cfg := apiConfig{
 		db:               db,
 		jwtSecret:        jwtSecret,
@@ -94,6 +102,7 @@ func main() {
 		s3Region:         s3Region,
 		s3CfDistribution: s3CfDistribution,
 		port:             port,
+		s3Client:		  client,
 	}
 
 	err = cfg.ensureAssetsDir()

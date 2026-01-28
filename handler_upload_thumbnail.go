@@ -5,8 +5,7 @@ import (
 	"net/http"
 	"io"
 	"os"
-	"crypto/rand"
-	""
+	"mime"
 
 
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
@@ -45,23 +44,18 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		respondWithError(w, http.StatusBadRequest, "Unable to parse form file", err)
 		return
 	}
-	mediaType := header.Header.Get("Content-Type") 
-	if mediaType == "" {
-		respondWithError(w, http.StatusBadRequest, "Couldn't find JWT", err)
+	mediaType, _, err := mime.ParseMediaType(header.Header.Get("Content-Type"))
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "Invalid Content-Type", err)
+		return
+	}
+	if mediaType != "image/jpeg" && mediaType != "image/png" {
+		respondWithError(w, http.StatusBadRequest, "Invalid file type", nil)
 		return
 	}
 
-	// generating random bytes
-	randomBytes := make([]byte, 32)
-	n, err := rand.Read(randomBytes)
-	if err != nil {
-		return fmt.Errorf("failed to generate random bytes: %w", err)
-	}
-
-	//converting the bytes to a safe string
-	randomFilename := base64.RawURLEncoding.EncodeToString(randomBytes)
-
-	assetPath := getAssetPath(videoID, mediaType)
+	assetPath := getAssetPath(mediaType)
+	fmt.Println("assetPath:", assetPath)
 	assetDiskPath := cfg.getAssetDiskPath(assetPath)
 
 	dst, err := os.Create(assetDiskPath)
