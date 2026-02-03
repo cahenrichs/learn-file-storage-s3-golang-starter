@@ -1,13 +1,15 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"os"
 
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/database"
 	"github.com/google/uuid"
-
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 )
@@ -85,12 +87,12 @@ func main() {
 		log.Fatal("PORT environment variable is not set")
 	}
 
-	awsConfig := config.LoadDefaultConfig(content.Background(), config.WithRegin(s3Regin)) 
-		if err 1= nil {
+	awsConfig, err := config.LoadDefaultConfig(context.Background(), config.WithRegion(s3Region)) 
+		if err != nil {
 			log.Fatal(err)
 		}
 
-		client := s3.NewFormConfig(awsConfig)
+		client := s3.NewFromConfig(awsConfig)
 
 	cfg := apiConfig{
 		db:               db,

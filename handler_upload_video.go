@@ -1,15 +1,12 @@
 package main
 
 import (
-	"bytes"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"mime"
 	"os"
-	"path/filepath"
+
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -20,7 +17,7 @@ import (
 func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request) {
 	//setting the upload limit of 1 GB
 	const uploadLimit = 1 << 30
-	r.Body = http.MaxByteReader(w, r.Body, uploadLimit)
+	r.Body = http.MaxBytesReader(w, r.Body, uploadLimit)
 
 	//Extracting tthe videoID from the URL path ad parsing it as a UUID
 	videoIDSString := r.PathValue("videoID")
@@ -56,7 +53,7 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 	}
 
 	//Parsing the uploaded video file from the form
-	file, header, err := r.FormFile("video")
+	file, handler, err := r.FormFile("video")
 	if err != nil {
 		respondWithError(w, http.StatusBadRequest, "Unable to parse form file", err)
 		return
@@ -80,7 +77,7 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		respondWithError(w, http.StatusInternalServerError, "Could not create temp file", err)
 		return
 	}
-	defer os.Remove(tempFile.Name)
+	defer os.Remove(tempFile.Name())
 	defer tempFile.Close()
 
 	if _, err := io.Copy(tempFile, file); err != nil {
@@ -89,14 +86,15 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 	}
 
 	//Reset tempFiles pointer to the begining
-	_, err = temp.Seek(0, io.SeekStart)
+	_, err = tempFile.Seek(0, io.SeekStart)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Could not reset file pointer", err)
 		return
 	}
 
+	key := getAssetPath(mediaType)
 	//Putting the object into s3
-	_, err = client.PutObject(ctx, &s3.PutObjectInput{
+	_, err = cfg.s3Client.PutObject(r.Context(), &s3.PutObjectInput{
 		Bucket:		aws.String(cfg.s3Bucket),
 		Key:		aws.String(key),
 		Body:		tempFile,
@@ -107,5 +105,31 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	
+	url := fmt.Sprintf("https://%s.s3.%s.amazonaws.com/%s",cfg.s3Bucket, cfg.s3Region, key)
+	video.VideoURL = &url
+	err = cfg.db.UpdateVideo(video)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Couldn't update vieo", err)
+		return
+	}
 
+	respondWithJSON(w, http.StatusOK, video)
+}
+
+
+func getVideoAspectRatio(filePath string) (string, error) {
+	cmd := cmd.exec.Command("ffprobe",
+		"-v", "error",
+		"-print_format", "json",
+		"-show_streams", 
+		filePath)
+
+	var stdout bytes.Buffer
+	cmd.Stdout = &stdout
+	err := cmd.Run()
+	if err != nil {
+		return "", fmt.Errorf("ffprobe error: %v", err)
+	}
+
+	
 }
