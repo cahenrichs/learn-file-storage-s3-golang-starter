@@ -1,11 +1,15 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"mime"
 	"os"
+	"os/exec"
+	"path/filepath"
 
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -92,7 +96,25 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+
+	directory := ""
+	aspectRatio, err := getVideoAspectRatio(tempFile.Name())
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "error processing video", err)
+		return
+	}
+
+	switch aspectRatio {
+	case	"16:9":
+		directory = "landscape"
+	case	"9:16":
+		directory = "portrait"
+	default:
+		directory = "other"
+	}
+
 	key := getAssetPath(mediaType)
+	key = filepath.Join(directory, key)
 	//Putting the object into s3
 	_, err = cfg.s3Client.PutObject(r.Context(), &s3.PutObjectInput{
 		Bucket:		aws.String(cfg.s3Bucket),
@@ -118,7 +140,7 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 
 
 func getVideoAspectRatio(filePath string) (string, error) {
-	cmd := cmd.exec.Command("ffprobe",
+	cmd := exec.Command("ffprobe",
 		"-v", "error",
 		"-print_format", "json",
 		"-show_streams", 
@@ -131,5 +153,28 @@ func getVideoAspectRatio(filePath string) (string, error) {
 		return "", fmt.Errorf("ffprobe error: %v", err)
 	}
 
+	var output struct {
+		Streams []struct {
+		Width	int   `json:"width"`
+		Height  int   `json:"height"`
+		}`json:"streams"`
+	}
+
+	if err = json.Unmarshal(stdout.Bytes(), &output); err != nil {
+		return "", fmt.Errorf("could not parse ffprobe output: %v", err)
+	}
+
+	width := output.Streams[0].Width
+	height := output.Streams[0].Height
+
+	if width == 16*height/9 {
+		return "16:9", nil
+	} else if height == 16*width/9 {
+		return "9:16", nil
+	}
+	return "other", nil
+}
+
+func processVideoForFasterStart(filePath string) (string, error) {
 	
 }
